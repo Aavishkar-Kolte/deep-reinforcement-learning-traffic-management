@@ -1,6 +1,9 @@
 # Temporary files
 quick_test.py
 
+# Replay files
+replay_files/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
