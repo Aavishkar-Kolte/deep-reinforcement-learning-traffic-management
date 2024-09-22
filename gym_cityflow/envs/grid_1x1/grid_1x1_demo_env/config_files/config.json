@@ -1,10 +1,10 @@
 {
-	"interval": 1.0,
+	"interval": 0.5,
 	"seed": 0,
 	"dir": "",
 	"roadnetFile": "gym_cityflow/envs/grid_1x1/grid_1x1_demo_env/config_files/roadnet.json", 
 	"flowFile": "gym_cityflow/envs/grid_1x1/grid_1x1_demo_env/config_files/flow.json", 
-	"rlTrafficLight": false,
+	"rlTrafficLight": true,
 	"laneChange": false,
 	"saveReplay": true,
 	"roadnetLogFile": "replay_files/Grid1x1DemoEnv/replay_roadnet.json", 
