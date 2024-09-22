@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 class Grid1x1DemoEnv(gym.Env):
-    def __init__(self, thread_num=1, time_steps=3600):
+    def __init__(self, thread_num=1, max_timesteps=3600):
         # Set up the environment configuration
         self.env_name = "Grid1x1DemoEnv"
         os.makedirs("replay_files", exist_ok=True)
@@ -23,7 +23,8 @@ class Grid1x1DemoEnv(gym.Env):
         config_file_path = os.path.join(self.current_dir, 'config_files', 'config.json')
         self.engine = cityflow.Engine(config_file=config_file_path, thread_num=thread_num)
 
-        self.time_steps = time_steps
+        self.max_timesteps = max_timesteps
+        self.current_timestep = 0
         self.current_episode = 0
 
         self.replay_files_dir_path = os.path.join(os.getcwd(), "replay_files", self.env_name, timestamp_string)
@@ -67,7 +68,22 @@ class Grid1x1DemoEnv(gym.Env):
 
 
     def step(self, action):
-        pass
+
+        for ind in range(len(action)):
+            self.engine.set_tl_phase(self.non_peripheral_intersections[ind]["id"], action[ind])
+
+        self.engine.next_step()
+
+        observation = self.engine.get_lane_waiting_vehicle_count().values()
+        terminated = False
+        if self.current_timestep >= self.max_timesteps:
+            terminated = True
+        truncated = False
+        info = {}
+
+        reward = (-1*self.engine.get_average_travel_time()) + (-0.2*sum(self.engine.get_lane_waiting_vehicle_count().values()))
+
+        return observation, reward, terminated, truncated, info
 
 
     def reset(self):
