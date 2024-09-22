@@ -4,6 +4,12 @@ quick_test.py
 # Replay files
 replay_files/
 
+# Tensorboard logs
+ppo_tensorboard/
+
+# Models
+models/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

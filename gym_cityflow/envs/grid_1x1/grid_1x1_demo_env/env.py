@@ -74,24 +74,30 @@ class Grid1x1DemoEnv(gym.Env):
 
         self.engine.next_step()
 
-        observation = self.engine.get_lane_waiting_vehicle_count().values()
-        terminated = False
-        if self.current_timestep >= self.max_timesteps:
-            terminated = True
+        terminated = True if self.current_timestep >= self.max_timesteps else False
         truncated = False
-        info = {}
-
+        
         reward = (-1*self.engine.get_average_travel_time()) + (-0.2*sum(self.engine.get_lane_waiting_vehicle_count().values()))
 
+        lane_waiting_vehicle_count = list(self.engine.get_lane_waiting_vehicle_count().values())
+        observation = np.array(lane_waiting_vehicle_count, dtype=np.int64)
+
+        info = {}
+
+        self.current_timestep += 1
+        
         return observation, reward, terminated, truncated, info
 
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
         self.engine.reset()
         self.current_episode += 1
+        self.current_timestep = 0
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
-        observation = self.engine.get_lane_waiting_vehicle_count().values()
+        lane_waiting_vehicle_count = list(self.engine.get_lane_waiting_vehicle_count().values())
+        observation = np.array(lane_waiting_vehicle_count, dtype=np.int64)
         info = {}
 
         return observation, info
