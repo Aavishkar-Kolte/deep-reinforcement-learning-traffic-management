@@ -63,7 +63,7 @@ class Grid1x1DemoEnv(gym.Env):
             high=int64_max_value,
             shape=(self.observation_space_length,),
             dtype=np.int64
-        )        
+        )
 
 
     def step(self, action):
@@ -71,8 +71,15 @@ class Grid1x1DemoEnv(gym.Env):
 
 
     def reset(self):
-        pass
+        self.engine.reset()
+        self.current_episode += 1
+        self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
+        observation = self.engine.get_lane_waiting_vehicle_count().values()
+        info = {}
+
+        return observation, info
+    
 
     def render(self, mode='human'):
         pass
