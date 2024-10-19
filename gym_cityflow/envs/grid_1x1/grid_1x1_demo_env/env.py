@@ -1,20 +1,25 @@
 import os
 import gymnasium as gym
-from gymnasium.spaces import Box
+from gymnasium.spaces import MultiDiscrete, Dict, Discrete
 import cityflow
 import numpy as np
-import json
 from datetime import datetime
-
+import json
 
 class Grid1x1DemoEnv(gym.Env):
+    env_name = "Grid1x1DemoEnv"
+    metadata = {
+        "render_modes" : [
+            "terminal"
+        ]
+    }
+    
+    
     def __init__(self, thread_num=1, max_timesteps=3600):
-        # Set up the environment configuration
-        self.env_name = "Grid1x1DemoEnv"
+        
         os.makedirs("replay_files", exist_ok=True)
         os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name), exist_ok=True)
 
-        # Get the current timestamp
         timestamp = datetime.now()
         timestamp_string = timestamp.strftime("%Y%m%d_%H%M%S")
         os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name, timestamp_string), exist_ok=True)
@@ -30,83 +35,121 @@ class Grid1x1DemoEnv(gym.Env):
         self.replay_files_dir_path = os.path.join(os.getcwd(), "replay_files", self.env_name, timestamp_string)
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
-        # Load the road network data
         roadnet_file_path = os.path.join(self.current_dir, "config_files", "roadnet.json")
         with open(roadnet_file_path, 'r') as file:
             roadnet_data = json.load(file)
 
-        # Process intersections to set up action space
         self.non_peripheral_intersections = []
-        high_value_arr = []
+        self.intersection_phases = []
+        self.current_phases = {}
 
         for intersection in roadnet_data["intersections"]:
             if not intersection["virtual"]:
                 self.non_peripheral_intersections.append(intersection)
-                high_value_arr.append(len(intersection["trafficLight"]["lightphases"]) - 1)
+                self.intersection_phases.append(len(intersection["trafficLight"]["lightphases"]))
+                self.current_phases[intersection["id"]] = 0  # Initialize to phase 0 or the default phase
 
-        # For manual testing
-        # print("Non-peripheral intersections:", self.non_peripheral_intersections)
-        # print("High value array:", np.array(high_value_arr, dtype=np.int64))
+        self._roads_data = {}
+        for road in roadnet_data["roads"]:
+            self._roads_data[road["id"]] = {
+                "lanes": road["lanes"]
+            }
 
-        # Define action space
-        self.action_space = Box(
-            low=np.zeros(len(high_value_arr), dtype=np.int64),
-            high=np.array(high_value_arr, dtype=np.int64),
-            shape=(len(high_value_arr),),
-            dtype=np.int64
-        )
+        # Flattened observation space
+        self.observation_space = Dict({
+            f"{intersection['id']}_phase": Discrete(len(intersection["trafficLight"]["lightphases"])) for intersection in self.non_peripheral_intersections
+        })
+        for intersection in self.non_peripheral_intersections:
+            for road in intersection["roads"]:
+                for ind in range(len(self._roads_data[road]["lanes"])):
+                    lane_id = f"{road}_{ind}"
+                    self.observation_space.spaces[f"{intersection['id']}_{lane_id}_running_vehicle_count"] = Discrete(1000)
+                    self.observation_space.spaces[f"{intersection['id']}_{lane_id}_waiting_vehicle_count"] = Discrete(1000)
 
-        # Define observation space
-        self.observation_space_length = len(self.engine.get_lane_waiting_vehicle_count())
-        int64_max_value = np.iinfo(np.int64).max
-        self.observation_space = Box(
-            low=0,
-            high=int64_max_value,
-            shape=(self.observation_space_length,),
-            dtype=np.int64
-        )
+        # Action space
+        self.action_space = MultiDiscrete([phase + 1 for phase in self.intersection_phases])
 
 
     def step(self, action):
+        for ind, intersection in enumerate(self.non_peripheral_intersections):
+            intersection_id = intersection["id"]
 
-        for ind in range(len(action)):
-            self.engine.set_tl_phase(self.non_peripheral_intersections[ind]["id"], action[ind])
+            # If the action is different from the previous phase, set the new phase
+            if action[ind] < self.intersection_phases[ind] and action[ind] != self.current_phases[intersection_id]:
+                print(f"Setting phase for intersection {intersection_id}: {action[ind]}")
+                self.engine.set_tl_phase(intersection_id, action[ind])
+                self.current_phases[intersection_id] = action[ind]  # Update stored phase
+            else:
+                print(f"Phase for intersection {intersection_id} remains unchanged: {self.current_phases[intersection_id]}")
 
         self.engine.next_step()
 
-        terminated = True if self.current_timestep >= self.max_timesteps else False
+        terminated = self.current_timestep >= self.max_timesteps
         truncated = False
-        
-        reward = (-1*self.engine.get_average_travel_time()) + (-0.2*sum(self.engine.get_lane_waiting_vehicle_count().values()))
 
-        lane_waiting_vehicle_count = list(self.engine.get_lane_waiting_vehicle_count().values())
-        observation = np.array(lane_waiting_vehicle_count, dtype=np.int64)
+        reward = (-1 * self.engine.get_average_travel_time()) + (-2 * sum(self.engine.get_lane_waiting_vehicle_count().values()))
+        
+        # Flatten the observation
+        observation = {}
+        for intersection in self.non_peripheral_intersections:
+            intersection_id = intersection["id"]
+
+            # Store current phase
+            observation[f"{intersection_id}_phase"] = self.current_phases[intersection_id]
+
+            # Get lane-specific data
+            for road_id in intersection["roads"]:
+                road = self._roads_data.get(road_id)
+
+                for ind, _ in enumerate(road["lanes"]):
+                    lane_id = f"{road_id}_{ind}"
+                    observation[f"{intersection_id}_{lane_id}_running_vehicle_count"] = self.engine.get_lane_vehicle_count().get(lane_id, 0)
+                    observation[f"{intersection_id}_{lane_id}_waiting_vehicle_count"] = self.engine.get_lane_waiting_vehicle_count().get(lane_id, 0)
 
         info = {}
 
         self.current_timestep += 1
-        
+
         return observation, reward, terminated, truncated, info
 
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.engine.reset()
+
         self.current_episode += 1
         self.current_timestep = 0
+
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
-        lane_waiting_vehicle_count = list(self.engine.get_lane_waiting_vehicle_count().values())
-        observation = np.array(lane_waiting_vehicle_count, dtype=np.int64)
+        # Initialize observation and reset phase tracking
+        observation = {}
+        for intersection in self.non_peripheral_intersections:
+            intersection_id = intersection["id"]
+            self.current_phases[intersection_id] = 0  # Reset to default phase
+
+            # Store current phase
+            observation[f"{intersection_id}_phase"] = self.current_phases[intersection_id]
+
+            # Get lane-specific data
+            for road_id in intersection["roads"]:
+                road = self._roads_data.get(road_id)
+
+                for ind, _ in enumerate(road["lanes"]):
+                    lane_id = f"{road_id}_{ind}"
+                    observation[f"{intersection_id}_{lane_id}_running_vehicle_count"] = self.engine.get_lane_vehicle_count().get(lane_id, 0)
+                    observation[f"{intersection_id}_{lane_id}_waiting_vehicle_count"] = self.engine.get_lane_waiting_vehicle_count().get(lane_id, 0)
+
         info = {}
 
         return observation, info
-    
 
-    def render(self, mode='human'):
-        pass
+
+    def render(self, mode="terminal"):
+        if mode == "terminal" :
+            print(f"{self.engine.get_average_travel_time()}   {sum(self.engine.get_lane_waiting_vehicle_count().values())}")
+            print("Reward: ", (-1 * self.engine.get_average_travel_time()) + (-2 * sum(self.engine.get_lane_waiting_vehicle_count().values())))
 
 
     def close(self):
         pass
-
