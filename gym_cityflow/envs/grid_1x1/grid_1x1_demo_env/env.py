@@ -16,7 +16,6 @@ class Grid1x1DemoEnv(gym.Env):
     
     
     def __init__(self, thread_num=1, max_timesteps=3600):
-        
         os.makedirs("replay_files", exist_ok=True)
         os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name), exist_ok=True)
 
@@ -26,6 +25,18 @@ class Grid1x1DemoEnv(gym.Env):
 
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
         config_file_path = os.path.join(self.current_dir, 'config_files', 'config.json')
+
+        with open(config_file_path, 'r') as file:
+            data = json.load(file)
+
+        data['dir'] = ""
+        data['roadnetFile'] = os.path.join(self.current_dir, 'config_files', 'roadnet.json')
+        data['flowFile'] = os.path.join(self.current_dir, 'config_files', 'flow.json')
+        data['roadnetLogFile'] = os.path.join('replay_files', self.env_name, 'replay_roadnet.json')
+
+        with open(config_file_path, 'w') as file:
+            json.dump(data, file, indent=4)
+
         self.engine = cityflow.Engine(config_file=config_file_path, thread_num=thread_num)
 
         self.max_timesteps = max_timesteps
@@ -76,11 +87,11 @@ class Grid1x1DemoEnv(gym.Env):
 
             # If the action is different from the previous phase, set the new phase
             if action[ind] < self.intersection_phases[ind] and action[ind] != self.current_phases[intersection_id]:
-                print(f"Setting phase for intersection {intersection_id}: {action[ind]}")
+                # print(f"Setting phase for intersection {intersection_id}: {action[ind]}")
                 self.engine.set_tl_phase(intersection_id, action[ind])
                 self.current_phases[intersection_id] = action[ind]  # Update stored phase
-            else:
-                print(f"Phase for intersection {intersection_id} remains unchanged: {self.current_phases[intersection_id]}")
+            # else:
+                # print(f"Phase for intersection {intersection_id} remains unchanged: {self.current_phases[intersection_id]}")
 
         self.engine.next_step()
 
@@ -146,10 +157,10 @@ class Grid1x1DemoEnv(gym.Env):
 
 
     def render(self, mode="terminal"):
-        if mode == "terminal" :
-            print(f"{self.engine.get_average_travel_time()}   {sum(self.engine.get_lane_waiting_vehicle_count().values())}")
-            print("Reward: ", (-1 * self.engine.get_average_travel_time()) + (-2 * sum(self.engine.get_lane_waiting_vehicle_count().values())))
-
+        # if mode == "terminal" :
+        #     print(f"{self.engine.get_average_travel_time()}   {sum(self.engine.get_lane_waiting_vehicle_count().values())}")
+        #     print("Reward: ", (-1 * self.engine.get_average_travel_time()) + (-2 * sum(self.engine.get_lane_waiting_vehicle_count().values())))
+        pass
 
     def close(self):
         pass
