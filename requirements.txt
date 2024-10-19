@@ -1,0 +1,12 @@
+wheel
+setuptools
+ipykernel
+CityFlow @ git+https://github.com/cityflow-project/CityFlow.git@75f31b8ccc04bf0dd2952b704fdd3e20982cc78f
+gymnasium==0.29.1
+matplotlib==3.9.2
+numpy==1.23.5
+pandas==2.2.3
+pygame==2.6.0
+stable_baselines3==2.3.2
+tensorflow==2.17.0
+
