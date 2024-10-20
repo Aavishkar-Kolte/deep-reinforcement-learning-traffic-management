@@ -7,7 +7,7 @@ print("Loading environment...")
 env = Grid1x1DemoEnv(max_timesteps=600, save_replay=True)
 
 print("Loading model...")
-model = PPO.load("models/ppo_traffic_agent_600000_steps.zip", env=env)
+model = PPO.load("models/ppo_traffic_agent_900000_steps.zip", env=env)
 
 print("Simulating...")
 obs, info = env.reset()
