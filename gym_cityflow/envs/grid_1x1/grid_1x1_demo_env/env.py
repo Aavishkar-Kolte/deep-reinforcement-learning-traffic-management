@@ -41,8 +41,9 @@ class Grid1x1DemoEnv(gym.Env):
         self.engine = cityflow.Engine(config_file=config_file_path, thread_num=thread_num)
 
         self.max_timesteps = max_timesteps
-        self.current_timestep = 0
+        self.current_timestep = 1
         self.current_episode = 0
+
 
         self.replay_files_dir_path = os.path.join(os.getcwd(), "replay_files", self.env_name, timestamp_string)
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
@@ -76,8 +77,7 @@ class Grid1x1DemoEnv(gym.Env):
 
         # Action space
         self.action_space = MultiDiscrete([phase + 1 for phase in self.intersection_phases])
-        print([phase + 1 for phase in self.intersection_phases])
-
+        self._avg_avg_tt = 0
 
     def step(self, action):
         for ind, intersection in enumerate(self.non_peripheral_intersections):
@@ -96,7 +96,16 @@ class Grid1x1DemoEnv(gym.Env):
         terminated = self.current_timestep >= self.max_timesteps
         truncated = False
 
-        reward = int(-1 * sum(self.engine.get_lane_waiting_vehicle_count().values()))
+        reward = 0
+        if(self.engine.get_average_travel_time() < self._avg_avg_tt):
+            reward += (self._avg_avg_tt - self.engine.get_average_travel_time())
+        else:
+            reward -= (self.engine.get_average_travel_time() - self._avg_avg_tt)
+
+        print(f"Average travel time: {self.engine.get_average_travel_time()} avg_avg_tt: {self._avg_avg_tt}")
+        print(f"Reward: {reward}")
+
+        self._avg_avg_tt = (self._avg_avg_tt * (self.current_timestep - 1)+ self.engine.get_average_travel_time()) / self.current_timestep
         
         # Flatten the observation
         observation_list = list(self.engine.get_lane_waiting_vehicle_count().values())
@@ -117,7 +126,8 @@ class Grid1x1DemoEnv(gym.Env):
         self.engine.reset()
 
         self.current_episode += 1
-        self.current_timestep = 0
+        self.current_timestep = 1
+        self._avg_avg_tt = 0
 
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
@@ -130,9 +140,9 @@ class Grid1x1DemoEnv(gym.Env):
 
 
     def render(self, mode="terminal"):
-        # if mode == "terminal" :
-        #     print(f"{self.engine.get_average_travel_time()}   {sum(self.engine.get_lane_waiting_vehicle_count().values())}")
-        #     print("Reward: ", (-1 * self.engine.get_average_travel_time()) + (-2 * sum(self.engine.get_lane_waiting_vehicle_count().values())))
+        if mode == "terminal" :
+            print(f"{self.engine.get_average_travel_time()}   {sum(self.engine.get_lane_waiting_vehicle_count().values())}")
+            print("Reward: ", (-1 * self.engine.get_average_travel_time()) + (-2 * sum(self.engine.get_lane_waiting_vehicle_count().values())))
         pass
 
     def close(self):
