@@ -1,6 +1,6 @@
 import os
 import gymnasium as gym
-from gymnasium.spaces import MultiDiscrete, Dict, Discrete
+from gymnasium.spaces import Box, MultiDiscrete
 import cityflow
 import numpy as np
 from datetime import datetime
@@ -15,7 +15,7 @@ class Grid1x1DemoEnv(gym.Env):
     }
     
     
-    def __init__(self, thread_num=1, max_timesteps=3600):
+    def __init__(self, thread_num=1, max_timesteps=3600, save_replay=False):
         os.makedirs("replay_files", exist_ok=True)
         os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name), exist_ok=True)
 
@@ -33,6 +33,7 @@ class Grid1x1DemoEnv(gym.Env):
         data['roadnetFile'] = os.path.join(self.current_dir, 'config_files', 'roadnet.json')
         data['flowFile'] = os.path.join(self.current_dir, 'config_files', 'flow.json')
         data['roadnetLogFile'] = os.path.join('replay_files', self.env_name, 'replay_roadnet.json')
+        data['saveReplay'] = save_replay
 
         with open(config_file_path, 'w') as file:
             json.dump(data, file, indent=4)
@@ -67,18 +68,15 @@ class Grid1x1DemoEnv(gym.Env):
             }
 
         # Flattened observation space
-        self.observation_space = Dict({
-            f"{intersection['id']}_phase": Discrete(len(intersection["trafficLight"]["lightphases"])) for intersection in self.non_peripheral_intersections
-        })
-        for intersection in self.non_peripheral_intersections:
-            for road in intersection["roads"]:
-                for ind in range(len(self._roads_data[road]["lanes"])):
-                    lane_id = f"{road}_{ind}"
-                    self.observation_space.spaces[f"{intersection['id']}_{lane_id}_running_vehicle_count"] = Discrete(1000)
-                    self.observation_space.spaces[f"{intersection['id']}_{lane_id}_waiting_vehicle_count"] = Discrete(1000)
+        lane_max_vehicle_count = 1000
+        non_peripheral_intersection_count = len(self.non_peripheral_intersections)
+        lane_count = len(self.engine.get_lane_waiting_vehicle_count().values())
+        self.observation_space = Box(low=0,high=lane_max_vehicle_count, shape=((lane_count + non_peripheral_intersection_count),), dtype=int)
+        self._last_observation = np.array([0]*(lane_count + 1), dtype=int)
 
         # Action space
         self.action_space = MultiDiscrete([phase + 1 for phase in self.intersection_phases])
+        print([phase + 1 for phase in self.intersection_phases])
 
 
     def step(self, action):
@@ -87,35 +85,25 @@ class Grid1x1DemoEnv(gym.Env):
 
             # If the action is different from the previous phase, set the new phase
             if action[ind] < self.intersection_phases[ind] and action[ind] != self.current_phases[intersection_id]:
-                # print(f"Setting phase for intersection {intersection_id}: {action[ind]}")
+                print(f"Setting phase for intersection {intersection_id}: {action[ind]}")
                 self.engine.set_tl_phase(intersection_id, action[ind])
                 self.current_phases[intersection_id] = action[ind]  # Update stored phase
-            # else:
-                # print(f"Phase for intersection {intersection_id} remains unchanged: {self.current_phases[intersection_id]}")
+            else:
+                print(f"Phase for intersection {intersection_id} remains unchanged: {self.current_phases[intersection_id]}")
 
         self.engine.next_step()
 
         terminated = self.current_timestep >= self.max_timesteps
         truncated = False
 
-        reward = (-1 * self.engine.get_average_travel_time()) + (-2 * sum(self.engine.get_lane_waiting_vehicle_count().values()))
+        reward = int(-1 * sum(self.engine.get_lane_waiting_vehicle_count().values()))
         
         # Flatten the observation
-        observation = {}
-        for intersection in self.non_peripheral_intersections:
-            intersection_id = intersection["id"]
-
-            # Store current phase
-            observation[f"{intersection_id}_phase"] = self.current_phases[intersection_id]
-
-            # Get lane-specific data
-            for road_id in intersection["roads"]:
-                road = self._roads_data.get(road_id)
-
-                for ind, _ in enumerate(road["lanes"]):
-                    lane_id = f"{road_id}_{ind}"
-                    observation[f"{intersection_id}_{lane_id}_running_vehicle_count"] = self.engine.get_lane_vehicle_count().get(lane_id, 0)
-                    observation[f"{intersection_id}_{lane_id}_waiting_vehicle_count"] = self.engine.get_lane_waiting_vehicle_count().get(lane_id, 0)
+        observation_list = list(self.engine.get_lane_waiting_vehicle_count().values())
+        for phase in action:
+            observation_list.append(phase)
+        observation = np.array(observation_list)
+        self._last_observation = observation
 
         info = {}
 
@@ -134,22 +122,7 @@ class Grid1x1DemoEnv(gym.Env):
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
         # Initialize observation and reset phase tracking
-        observation = {}
-        for intersection in self.non_peripheral_intersections:
-            intersection_id = intersection["id"]
-            self.current_phases[intersection_id] = 0  # Reset to default phase
-
-            # Store current phase
-            observation[f"{intersection_id}_phase"] = self.current_phases[intersection_id]
-
-            # Get lane-specific data
-            for road_id in intersection["roads"]:
-                road = self._roads_data.get(road_id)
-
-                for ind, _ in enumerate(road["lanes"]):
-                    lane_id = f"{road_id}_{ind}"
-                    observation[f"{intersection_id}_{lane_id}_running_vehicle_count"] = self.engine.get_lane_vehicle_count().get(lane_id, 0)
-                    observation[f"{intersection_id}_{lane_id}_waiting_vehicle_count"] = self.engine.get_lane_waiting_vehicle_count().get(lane_id, 0)
+        observation = self._last_observation
 
         info = {}
 
