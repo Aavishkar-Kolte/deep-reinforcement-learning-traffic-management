@@ -3,10 +3,10 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback
-from gym_cityflow.envs.grid_1x1.grid_1x1_demo_env import Grid1x1DemoEnv
+from gym_cityflow import CityflowEnv
 
 
-env = Grid1x1DemoEnv(max_timesteps=600, save_replay=False)
+env = CityflowEnv(max_timesteps=600, save_replay=False)
 check_env(env)
 
 env = Monitor(env)
