@@ -4,17 +4,17 @@ from stable_baselines3 import PPO
 
 
 print("Loading environment...")
-env = CityflowEnv(max_timesteps=600, save_replay=True)
+env_name = "example"
+env = CityflowEnv(max_timesteps=100, save_replay=True, env_name=env_name, terminal_logs=True)
 
 print("Loading model...")
-model = PPO.load("models/ppo_traffic_agent_900000_steps.zip", env=env)
+model = PPO.load("ppo_traffic_final_model_[example]_100000_timesteps.zip", env=env)
 
 print("Simulating...")
 obs, info = env.reset()
 while True:
     action, _states = model.predict(obs, deterministic=True)
     obs, rewards, terminated, truncated, info = env.step(action)
-    env.render(mode="terminal")
     if terminated or truncated:
         break
 
