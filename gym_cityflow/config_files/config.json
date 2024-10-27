@@ -1,0 +1,12 @@
+{
+    "interval": 0.5,
+    "seed": 0,
+    "dir": "",
+    "roadnetFile": "gym_cityflow/config_files/syn_4x4_gaussian_500_1h/roadnet.json",
+    "flowFile": "gym_cityflow/config_files/syn_4x4_gaussian_500_1h/flow.json",
+    "rlTrafficLight": false,
+    "laneChange": false,
+    "saveReplay": true,
+    "roadnetLogFile": "/home/prj/Desktop/drl/dev2/deep-reinforcement-learning-traffic-management/replay_files/syn_4x4_gaussian_500_1h/replay_roadnet.json",
+    "replayLogFile": "/home/prj/Desktop/drl/dev2/deep-reinforcement-learning-traffic-management/replay_files/example/20241027_113426/replay.txt"
+}

@@ -6,8 +6,8 @@ import numpy as np
 from datetime import datetime
 import json
 
-class Grid1x1DemoEnv(gym.Env):
-    env_name = "Grid1x1DemoEnv"
+class CityflowEnv(gym.Env):
+    env_name = ""
     metadata = {
         "render_modes" : [
             "terminal"
@@ -15,7 +15,8 @@ class Grid1x1DemoEnv(gym.Env):
     }
     
     
-    def __init__(self, thread_num=1, max_timesteps=3600, save_replay=False):
+    def __init__(self, thread_num=1, max_timesteps=3600, save_replay=False, env_name="example"):
+        self.env_name = env_name
         os.makedirs("replay_files", exist_ok=True)
         os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name), exist_ok=True)
 
@@ -30,8 +31,8 @@ class Grid1x1DemoEnv(gym.Env):
             data = json.load(file)
 
         data['dir'] = ""
-        data['roadnetFile'] = os.path.join(self.current_dir, 'config_files', 'roadnet.json')
-        data['flowFile'] = os.path.join(self.current_dir, 'config_files', 'flow.json')
+        data['roadnetFile'] = os.path.join(self.current_dir, 'config_files', f"{self.env_name}", 'roadnet.json')
+        data['flowFile'] = os.path.join(self.current_dir, 'config_files', f"{self.env_name}", 'flow.json')
         data['roadnetLogFile'] = os.path.join('replay_files', self.env_name, 'replay_roadnet.json')
         data['saveReplay'] = save_replay
 
@@ -48,7 +49,7 @@ class Grid1x1DemoEnv(gym.Env):
         self.replay_files_dir_path = os.path.join(os.getcwd(), "replay_files", self.env_name, timestamp_string)
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
-        roadnet_file_path = os.path.join(self.current_dir, "config_files", "roadnet.json")
+        roadnet_file_path = os.path.join(self.current_dir, "config_files", f"{self.env_name}", "roadnet.json")
         with open(roadnet_file_path, 'r') as file:
             roadnet_data = json.load(file)
 
