@@ -15,15 +15,17 @@ class CityflowEnv(gym.Env):
     }
     
     
-    def __init__(self, thread_num=1, max_timesteps=3600, save_replay=False, env_name="env", terminal_logs=False):
+    def __init__(self, thread_num=1, max_timesteps=3600, env_name="env", terminal_logs=False, replay_config=None):
+        save_replay, model_num = replay_config["save_replay"], replay_config["model_num"]
         self.env_name = env_name
         os.makedirs("replay_files", exist_ok=True)
         os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name), exist_ok=True)
+        os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name, model_num), exist_ok=True)
 
         timestamp = datetime.now()
         timestamp_string = timestamp.strftime("%Y%m%d_%H%M%S")
         if save_replay:
-            os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name, timestamp_string), exist_ok=True)
+            os.makedirs(os.path.join(os.getcwd(), "replay_files", self.env_name, model_num, timestamp_string), exist_ok=True)
 
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
         config_file_path = os.path.join(self.current_dir, 'config_files', 'config.json')
@@ -32,7 +34,7 @@ class CityflowEnv(gym.Env):
             data = json.load(file)
 
         data['dir'] = ""
-        data['rlTrafficLight'] = True
+        data['rlTrafficLight'] = False
         data['roadnetFile'] = os.path.join(self.current_dir, 'config_files', f"{self.env_name}", 'roadnet.json')
         data['flowFile'] = os.path.join(self.current_dir, 'config_files', f"{self.env_name}", 'flow.json')
         data['roadnetLogFile'] = os.path.join('replay_files', self.env_name, 'replay_roadnet.json')
@@ -44,13 +46,12 @@ class CityflowEnv(gym.Env):
         self.engine = cityflow.Engine(config_file=config_file_path, thread_num=thread_num)
 
         self.max_timesteps = max_timesteps
-        self.current_timestep = 1
+        self.current_timestep = 0
         self.current_episode = 0
         self._terminal_logs = terminal_logs
 
-        self.replay_files_dir_path = os.path.join(os.getcwd(), "replay_files", self.env_name, timestamp_string)
-        self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
-
+        self.replay_files_dir_path = os.path.join(os.getcwd(), "replay_files", self.env_name, model_num, timestamp_string)
+        
         roadnet_file_path = os.path.join(self.current_dir, "config_files", f"{self.env_name}", "roadnet.json")
         with open(roadnet_file_path, 'r') as file:
             roadnet_data = json.load(file)
@@ -102,15 +103,34 @@ class CityflowEnv(gym.Env):
                 self.engine.set_tl_phase(intersection_id, action[ind])
                 self.current_phases[intersection_id] = action[ind]  # Update stored phase
 
+        info = {}
+        info["avg_travel_time"] = list()
+        info["avg_speed"] = list()
+        info["num_vehicles"] = list()
+        info["num_waiting_vehicles"] = list()
+        info["num_running_vehicles"] = list()
+
+                
         prev_avg_travel_time = self.engine.get_average_travel_time()
         reward = 0
 
-        for _ in range(10):
+        for i in range(10):
             self.engine.next_step()
-            reward += (sum(self.engine.get_vehicle_speed().values()) / len(self.engine.get_vehicle_speed().values()) )
+            reward += (sum(self.engine.get_vehicle_speed().values()) / len(self.engine.get_vehicle_speed().values()))
 
-        terminated = self.current_timestep >= self.max_timesteps
-        truncated = False
+            info["avg_travel_time"].append(self.engine.get_average_travel_time())
+            info["avg_speed"].append(sum(self.engine.get_vehicle_speed().values()) / self.engine.get_vehicle_count())
+            info["num_vehicles"].append(self.engine.get_vehicle_count())
+            info["num_waiting_vehicles"].append(sum(self.engine.get_lane_waiting_vehicle_count().values()))
+            info["num_running_vehicles"].append(info["num_vehicles"][-1] - info["num_waiting_vehicles"][-1])
+
+            # print(f"Step {(10*self.current_timestep) + i} completed.")
+            # print(f"Average travel time: {info['avg_travel_time'][-1]}")
+            # print(f"Average speed: {info['avg_speed'][-1]}")
+            # print(f"Number of vehicles: {info['num_vehicles'][-1]}")
+            # print(f"Number of waiting vehicles: {info['num_waiting_vehicles'][-1]}")
+            # print(f"Number of running vehicles: {info['num_running_vehicles'][-1]}")
+
         
         curr_avg_travel_time = self.engine.get_average_travel_time()
         reward /= 10
@@ -124,9 +144,10 @@ class CityflowEnv(gym.Env):
         observation = np.array(observation_list)
         self._last_observation = observation
 
-        info = {}
-
         self.current_timestep += 1
+
+        terminated = not (self.current_timestep < self.max_timesteps)
+        truncated = False
 
         if self._terminal_logs:
             self.render()
@@ -139,14 +160,16 @@ class CityflowEnv(gym.Env):
         self.engine.reset()
 
         self.current_episode += 1
-        self.current_timestep = 1
+        self.current_timestep = 0
 
         self.engine.set_replay_file(os.path.join(self.replay_files_dir_path, f"replay_{self.current_episode}.txt"))
 
         # Initialize observation and reset phase tracking
         observation = self._last_observation
 
-        info = {}
+        info = {
+            "replay_file_dir": self.replay_files_dir_path
+        }
 
         return observation, info
     
