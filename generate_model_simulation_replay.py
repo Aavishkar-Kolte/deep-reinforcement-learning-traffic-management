@@ -30,7 +30,8 @@ with open(charts_file_path, "w") as charts_file:
 
     time_step = 0
     while True:
-        action = env.action_space.sample()  
+        # action = env.action_space.sample()
+        action, _ = model.predict(obs)
         obs, rewards, terminated, truncated, info = env.step(action)
 
         for i in range(10):
